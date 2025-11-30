@@ -1,0 +1,14 @@
+# Add these lines to your .gitignore file
+ai-service/venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.dll
+*.lib
+*.exe
+*.obj
+*.o
+*.a
+*.lib

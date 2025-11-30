@@ -1,0 +1,291 @@
+import React, { useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { Calendar, MapPin, Users, Tag, Star, ArrowLeft } from 'lucide-react';
+import { eventsApi, registrationsApi } from '../services/api';
+import LoadingSpinner from '../components/LoadingSpinner';
+import toast from 'react-hot-toast';
+
+type EventType = {
+  _id: string;
+  name: string;
+  description: string;
+  category: string;
+  date: string;
+  location: string;
+  tags: string[];
+  registeredCount: number;
+  averageRating: number | null;
+};
+
+type RegistrationType = {
+  event: { _id: string };
+  rating?: number;
+};
+
+function EventDetails() {
+  console.log('EventDetails component rendered'); 
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  console.log('Event ID from URL:', id);
+
+
+  // Fetch event details
+  /*const { data: event, isLoading: eventLoading } = useQuery<EventType>(
+    ['event', id],
+    () => eventsApi.getById(id!).then(res => res.data)
+  );*/
+  const { data: event, isLoading: eventLoading, error } = useQuery<EventType>(
+  ['event', id],
+  async () => {
+    const res = await eventsApi.getById(id!);
+    console.log('Fetched event data:', res.data);
+    return res.data;
+  },
+  {
+    enabled: !!id, // only run query if id exists
+    onSuccess: (data) => console.log('Query succeeded with data:', data),
+    onError: (err) => console.error('Query failed with error:', err),
+  }
+);
+
+
+
+  // Fetch user registrations
+  const { data: registrations } = useQuery<RegistrationType[]>(
+    'userRegistrations',
+    () => registrationsApi.getUserRegistrations().then(res => res.data)
+  );
+
+  const registerMutation = useMutation(
+    () => registrationsApi.register(id!),
+    {
+      onSuccess: () => {
+        toast.success('Successfully registered for the event!');
+        queryClient.invalidateQueries('userRegistrations');
+      },
+      onError: (error: any) => {
+        toast.error(error.response?.data?.message || 'Registration failed');
+      }
+    }
+  );
+
+  const rateMutation = useMutation(
+    (rating: number) => registrationsApi.rate(id!, rating),
+    {
+      onSuccess: () => {
+        toast.success('Rating submitted successfully!');
+        queryClient.invalidateQueries(['event', id]);
+      },
+      onError: (error: any) => {
+        toast.error(error.response?.data?.message || 'Rating submission failed');
+      }
+    }
+  );
+
+  if (eventLoading) {
+    return <LoadingSpinner size="large" />;
+  }
+
+  if (!event) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-white">Event not found</h2>
+        </div>
+      </div>
+    );
+  }
+
+  //const isRegistered = registrations?.some((reg) => reg.event._id === id);
+  //const userRegistration = registrations?.find((reg) => reg.event._id === id);
+  const isRegistered = Array.isArray(registrations) 
+  ? registrations.some((reg) => reg.event._id === id)
+  : false;
+
+const userRegistration = Array.isArray(registrations) 
+  ? registrations.find((reg) => reg.event._id === id)
+  : undefined;
+
+  const canRate = isRegistered && new Date(event.date) < new Date();
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const handleRegister = () => {
+    registerMutation.mutate();
+  };
+
+  const handleRating = (newRating: number) => {
+    setRating(newRating);
+    rateMutation.mutate(newRating);
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <button
+        onClick={() => navigate(-1)}
+        className="flex items-center text-gray-400 hover:text-white mb-6 transition-colors"
+      >
+        <ArrowLeft className="h-5 w-5 mr-2" />
+        Back
+      </button>
+
+      <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl overflow-hidden">
+        <div className="p-8">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
+            <div>
+              <span className="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full text-sm font-medium mb-4 inline-block">
+                {event.category}
+              </span>
+              <h1 className="text-3xl font-bold text-white mb-2">{event.name}</h1>
+              
+              {event.averageRating != null && (
+                <div className="flex items-center">
+                  <div className="flex">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        className={`h-5 w-5 ${
+                          star <= event.averageRating! 
+                            ? 'text-yellow-400 fill-current' 
+                            : 'text-gray-600'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <span className="ml-2 text-gray-300">
+                    {event.averageRating!.toFixed(1)} / 5.0
+                  </span>
+                </div>
+              )}
+            </div>
+            
+            {!isRegistered && (
+              <button
+                onClick={handleRegister}
+                disabled={registerMutation.isLoading || new Date(event.date) < new Date()}
+                className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {registerMutation.isLoading ? 'Registering...' : 'Register for Event'}
+              </button>
+            )}
+
+            {isRegistered && (
+              <div className="bg-green-500/20 text-green-300 px-4 py-2 rounded-lg font-medium">
+                ✓ Registered
+              </div>
+            )}
+          </div>
+
+          {/* Event Info */}
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
+            <div className="flex items-center text-gray-300">
+              <Calendar className="h-5 w-5 mr-3 text-blue-400" />
+              <div>
+                <p className="text-sm text-gray-400">Date & Time</p>
+                <p>{formatDate(event.date)}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center text-gray-300">
+              <MapPin className="h-5 w-5 mr-3 text-green-400" />
+              <div>
+                <p className="text-sm text-gray-400">Location</p>
+                <p>{event.location}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center text-gray-300">
+              <Users className="h-5 w-5 mr-3 text-purple-400" />
+              <div>
+                <p className="text-sm text-gray-400">Registered</p>
+                <p>{event.registeredCount || 0} attendees</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Description */}
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold text-white mb-4">About This Event</h2>
+            <p className="text-gray-300 leading-relaxed">{event.description}</p>
+          </div>
+
+          {/* Tags */}
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold text-white mb-3">Tags</h3>
+            <div className="flex flex-wrap gap-2">
+              {event.tags.map((tag, index) => (
+                <span key={index} className="bg-purple-500/20 text-purple-300 px-3 py-1 rounded-md text-sm flex items-center">
+                  <Tag className="h-3 w-3 mr-1" />
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Rating Section */}
+          {canRate && (
+            <div className="border-t border-white/10 pt-8">
+              <h3 className="text-lg font-semibold text-white mb-4">Rate This Event</h3>
+              {!userRegistration?.rating ? (
+                <div>
+                  <p className="text-gray-300 mb-4">How would you rate this event?</p>
+                  <div className="flex items-center space-x-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        onClick={() => handleRating(star)}
+                        onMouseEnter={() => setHoverRating(star)}
+                        onMouseLeave={() => setHoverRating(0)}
+                        className="transition-transform hover:scale-110"
+                        disabled={rateMutation.isLoading}
+                      >
+                        <Star
+                          className={`h-8 w-8 ${
+                            star <= (hoverRating || rating) 
+                              ? 'text-yellow-400 fill-current' 
+                              : 'text-gray-600 hover:text-yellow-400'
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-gray-300 mb-2">Your rating:</p>
+                  <div className="flex">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        className={`h-6 w-6 ${
+                          star <= (userRegistration?.rating ?? 0) 
+                            ? 'text-yellow-400 fill-current' 
+                            : 'text-gray-600'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default EventDetails;
