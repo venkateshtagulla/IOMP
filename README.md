@@ -231,17 +231,3 @@ python -m pytest tests/
 4. Push to the branch
 5. Open a Pull Request
 
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🆘 Support
-
-For support and questions:
-- Create an issue on GitHub
-- Email: support@example.com
-- Documentation: [Wiki](wiki-link)
-
----
-
-Built with ❤️ using modern web technologies and AI/ML algorithms.
